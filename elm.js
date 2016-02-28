@@ -2701,6 +2701,116 @@ Elm.Native.Signal.make = function(localRuntime) {
 	};
 };
 
+Elm.Native.Time = {};
+
+Elm.Native.Time.make = function(localRuntime)
+{
+	localRuntime.Native = localRuntime.Native || {};
+	localRuntime.Native.Time = localRuntime.Native.Time || {};
+	if (localRuntime.Native.Time.values)
+	{
+		return localRuntime.Native.Time.values;
+	}
+
+	var NS = Elm.Native.Signal.make(localRuntime);
+	var Maybe = Elm.Maybe.make(localRuntime);
+
+
+	// FRAMES PER SECOND
+
+	function fpsWhen(desiredFPS, isOn)
+	{
+		var msPerFrame = 1000 / desiredFPS;
+		var ticker = NS.input('fps-' + desiredFPS, null);
+
+		function notifyTicker()
+		{
+			localRuntime.notify(ticker.id, null);
+		}
+
+		function firstArg(x, y)
+		{
+			return x;
+		}
+
+		// input fires either when isOn changes, or when ticker fires.
+		// Its value is a tuple with the current timestamp, and the state of isOn
+		var input = NS.timestamp(A3(NS.map2, F2(firstArg), NS.dropRepeats(isOn), ticker));
+
+		var initialState = {
+			isOn: false,
+			time: localRuntime.timer.programStart,
+			delta: 0
+		};
+
+		var timeoutId;
+
+		function update(input, state)
+		{
+			var currentTime = input._0;
+			var isOn = input._1;
+			var wasOn = state.isOn;
+			var previousTime = state.time;
+
+			if (isOn)
+			{
+				timeoutId = localRuntime.setTimeout(notifyTicker, msPerFrame);
+			}
+			else if (wasOn)
+			{
+				clearTimeout(timeoutId);
+			}
+
+			return {
+				isOn: isOn,
+				time: currentTime,
+				delta: (isOn && !wasOn) ? 0 : currentTime - previousTime
+			};
+		}
+
+		return A2(
+			NS.map,
+			function(state) { return state.delta; },
+			A3(NS.foldp, F2(update), update(input.value, initialState), input)
+		);
+	}
+
+
+	// EVERY
+
+	function every(t)
+	{
+		var ticker = NS.input('every-' + t, null);
+		function tellTime()
+		{
+			localRuntime.notify(ticker.id, null);
+		}
+		var clock = A2(NS.map, fst, NS.timestamp(ticker));
+		setInterval(tellTime, t);
+		return clock;
+	}
+
+
+	function fst(pair)
+	{
+		return pair._0;
+	}
+
+
+	function read(s)
+	{
+		var t = Date.parse(s);
+		return isNaN(t) ? Maybe.Nothing : Maybe.Just(t);
+	}
+
+	return localRuntime.Native.Time.values = {
+		fpsWhen: F2(fpsWhen),
+		every: every,
+		toDate: function(t) { return new Date(t); },
+		read: read
+	};
+};
+
 Elm.Native.Transform2D = {};
 Elm.Native.Transform2D.make = function(localRuntime) {
 	localRuntime.Native = localRuntime.Native || {};
@@ -5476,6 +5586,52 @@ Elm.Signal.make = function (_elm) {
                                ,forwardTo: forwardTo
                                ,Mailbox: Mailbox};
 };
+Elm.Time = Elm.Time || {};
+Elm.Time.make = function (_elm) {
+   "use strict";
+   _elm.Time = _elm.Time || {};
+   if (_elm.Time.values) return _elm.Time.values;
+   var _U = Elm.Native.Utils.make(_elm),
+   $Basics = Elm.Basics.make(_elm),
+   $Native$Signal = Elm.Native.Signal.make(_elm),
+   $Native$Time = Elm.Native.Time.make(_elm),
+   $Signal = Elm.Signal.make(_elm);
+   var _op = {};
+   var delay = $Native$Signal.delay;
+   var since = F2(function (time,signal) {
+      var stop = A2($Signal.map,$Basics.always(-1),A2(delay,time,signal));
+      var start = A2($Signal.map,$Basics.always(1),signal);
+      var delaydiff = A3($Signal.foldp,F2(function (x,y) {    return x + y;}),0,A2($Signal.merge,start,stop));
+      return A2($Signal.map,F2(function (x,y) {    return !_U.eq(x,y);})(0),delaydiff);
+   });
+   var timestamp = $Native$Signal.timestamp;
+   var every = $Native$Time.every;
+   var fpsWhen = $Native$Time.fpsWhen;
+   var fps = function (targetFrames) {    return A2(fpsWhen,targetFrames,$Signal.constant(true));};
+   var inMilliseconds = function (t) {    return t;};
+   var millisecond = 1;
+   var second = 1000 * millisecond;
+   var minute = 60 * second;
+   var hour = 60 * minute;
+   var inHours = function (t) {    return t / hour;};
+   var inMinutes = function (t) {    return t / minute;};
+   var inSeconds = function (t) {    return t / second;};
+   return _elm.Time.values = {_op: _op
+                             ,millisecond: millisecond
+                             ,second: second
+                             ,minute: minute
+                             ,hour: hour
+                             ,inMilliseconds: inMilliseconds
+                             ,inSeconds: inSeconds
+                             ,inMinutes: inMinutes
+                             ,inHours: inHours
+                             ,fps: fps
+                             ,fpsWhen: fpsWhen
+                             ,every: every
+                             ,timestamp: timestamp
+                             ,delay: delay
+                             ,since: since};
+};
 Elm.Native.String = {};
 
 Elm.Native.String.make = function(localRuntime) {
@@ -6656,28 +6812,6 @@ Elm.Block.make = function (_elm) {
    var main = A3($Graphics$Collage.collage,400,400,_U.list([toForm(Block($Color.blue))]));
    return _elm.Block.values = {_op: _op,Block: Block,size: size,toForm: toForm,main: main};
 };
-Elm.Controller = Elm.Controller || {};
-Elm.Controller.make = function (_elm) {
-   "use strict";
-   _elm.Controller = _elm.Controller || {};
-   if (_elm.Controller.values) return _elm.Controller.values;
-   var _U = Elm.Native.Utils.make(_elm),
-   $Basics = Elm.Basics.make(_elm),
-   $Debug = Elm.Debug.make(_elm),
-   $Graphics$Element = Elm.Graphics.Element.make(_elm),
-   $Keyboard = Elm.Keyboard.make(_elm),
-   $List = Elm.List.make(_elm),
-   $Maybe = Elm.Maybe.make(_elm),
-   $Result = Elm.Result.make(_elm),
-   $Signal = Elm.Signal.make(_elm);
-   var _op = {};
-   var Shift = function (a) {    return {ctor: "Shift",_0: a};};
-   var Rotate = {ctor: "Rotate"};
-   var arrowsToInput = function (_p0) {    var _p1 = _p0;var _p2 = _p1.y;return _U.eq(_p2,1) ? Rotate : Shift({ctor: "_Tuple2",_0: _p2,_1: _p1.x});};
-   var inputs = A2($Signal.map,arrowsToInput,$Keyboard.arrows);
-   var main = A2($Signal.map,$Graphics$Element.show,inputs);
-   return _elm.Controller.values = {_op: _op,Rotate: Rotate,Shift: Shift,arrowsToInput: arrowsToInput,inputs: inputs,main: main};
-};
 Elm.Tetromino = Elm.Tetromino || {};
 Elm.Tetromino.make = function (_elm) {
    "use strict";
@@ -6792,15 +6926,17 @@ Elm.Tetromino.make = function (_elm) {
                                   ,tetromino: tetromino
                                   ,main: main};
 };
-Elm.State = Elm.State || {};
-Elm.State.make = function (_elm) {
+Elm.Board = Elm.Board || {};
+Elm.Board.make = function (_elm) {
    "use strict";
-   _elm.State = _elm.State || {};
-   if (_elm.State.values) return _elm.State.values;
+   _elm.Board = _elm.Board || {};
+   if (_elm.Board.values) return _elm.Board.values;
    var _U = Elm.Native.Utils.make(_elm),
    $Basics = Elm.Basics.make(_elm),
-   $Controller = Elm.Controller.make(_elm),
+   $Block = Elm.Block.make(_elm),
+   $Color = Elm.Color.make(_elm),
    $Debug = Elm.Debug.make(_elm),
+   $Dict = Elm.Dict.make(_elm),
    $Graphics$Collage = Elm.Graphics.Collage.make(_elm),
    $Graphics$Element = Elm.Graphics.Element.make(_elm),
    $List = Elm.List.make(_elm),
@@ -6809,23 +6945,242 @@ Elm.State.make = function (_elm) {
    $Signal = Elm.Signal.make(_elm),
    $Tetromino = Elm.Tetromino.make(_elm);
    var _op = {};
+   var tetromino = A2($Tetromino.shift,{ctor: "_Tuple2",_0: 1,_1: 5},$Tetromino.j);
+   var isIntersecting = F2(function (_p0,board) {
+      var _p1 = _p0;
+      var checkLocation = function (location) {    return A2($Dict.member,location,board);};
+      return A2($List.any,checkLocation,_p1.shape);
+   });
+   var clearRow = F2(function (row,board) {
+      var shift = F3(function (_p2,block,newBoard) {
+         var _p3 = _p2;
+         var _p5 = _p3._0;
+         var _p4 = _p3._1;
+         return _U.cmp(_p5,row) < 0 ? A3($Dict.insert,{ctor: "_Tuple2",_0: _p5,_1: _p4},block,newBoard) : _U.cmp(_p5,row) > 0 ? A3($Dict.insert,
+         {ctor: "_Tuple2",_0: _p5 - 1,_1: _p4},
+         block,
+         newBoard) : newBoard;
+      });
+      return A3($Dict.foldr,shift,$Dict.empty,board);
+   });
+   var cumulativeSum = A2($List.scanl,F2(function (x,y) {    return x + y;}),0);
+   var iota = function (n) {    return cumulativeSum(A2($List.repeat,n - 1,1));};
+   var rows = 20;
+   var cols = 10;
+   var background = function () {
+      var shape = A2($Graphics$Collage.rect,$Basics.toFloat(cols) * $Block.size,$Basics.toFloat(rows) * $Block.size);
+      var border = A2($Graphics$Collage.outlined,$Graphics$Collage.solid($Color.black),shape);
+      return $Graphics$Collage.group(_U.list([border,A2($Graphics$Collage.filled,$Color.black,shape)]));
+   }();
+   var addBlock = F3(function (_p6,block,form) {
+      var _p7 = _p6;
+      var y = $Basics.toFloat(_p7._0) * $Block.size;
+      var x = $Basics.toFloat(_p7._1) * $Block.size;
+      var offSetY = (0 - $Basics.toFloat(rows - 1)) / 2 * $Block.size;
+      var offSetX = (0 - $Basics.toFloat(cols - 1)) / 2 * $Block.size;
+      var blockForm = A2($Graphics$Collage.move,{ctor: "_Tuple2",_0: offSetX + x,_1: offSetY + y},$Block.toForm(block));
+      return $Graphics$Collage.group(_U.list([form,blockForm]));
+   });
+   var toForm = function (board) {    return A3($Dict.foldr,addBlock,background,board);};
+   var testForm = A3(addBlock,{ctor: "_Tuple2",_0: 0,_1: 0},$Block.Block($Color.blue),background);
+   var testForm$ = A3(addBlock,{ctor: "_Tuple2",_0: 1,_1: 0},$Block.Block($Color.red),testForm);
+   var testForm$$ = A3(addBlock,{ctor: "_Tuple2",_0: 0,_1: 1},$Block.Block($Color.yellow),testForm$);
+   var checkRow = F2(function (row,board) {
+      var blocks = A2($Dict.filter,F2(function (_p9,_p8) {    var _p10 = _p9;return _U.eq(_p10._0,row);}),board);
+      return _U.eq($Dict.size(blocks),cols);
+   });
+   var clearLines = function () {
+      var clearLines$ = F3(function (row,lines,board) {
+         clearLines$: while (true) if (_U.cmp(row,rows) > -1) return {ctor: "_Tuple2",_0: lines,_1: board}; else if (A2(checkRow,row,board)) {
+                  var _v4 = row,_v5 = lines + 1,_v6 = A2(clearRow,row,board);
+                  row = _v4;
+                  lines = _v5;
+                  board = _v6;
+                  continue clearLines$;
+               } else {
+                  var _v7 = row + 1,_v8 = lines,_v9 = board;
+                  row = _v7;
+                  lines = _v8;
+                  board = _v9;
+                  continue clearLines$;
+               }
+      });
+      return A2(clearLines$,0,0);
+   }();
+   var inBounds = function (_p11) {
+      var _p12 = _p11;
+      var checkLocation = function (_p13) {
+         var _p14 = _p13;
+         var _p15 = _p14._1;
+         return _U.cmp(_p14._0,0) > -1 && (_U.cmp(_p15,0) > -1 && _U.cmp(_p15,cols) < 0);
+      };
+      return A2($List.all,checkLocation,_p12.shape);
+   };
+   var isValid = F2(function (tetromino,board) {    return inBounds(tetromino) && $Basics.not(A2(isIntersecting,tetromino,board));});
+   var $new = $Dict.fromList;
+   var testBoard = $new(_U.list([{ctor: "_Tuple2",_0: {ctor: "_Tuple2",_0: 0,_1: 0},_1: $Block.Block($Color.blue)}
+                                ,{ctor: "_Tuple2",_0: {ctor: "_Tuple2",_0: 0,_1: 1},_1: $Block.Block($Color.yellow)}
+                                ,{ctor: "_Tuple2",_0: {ctor: "_Tuple2",_0: 1,_1: 0},_1: $Block.Block($Color.red)}
+                                ,{ctor: "_Tuple2",_0: {ctor: "_Tuple2",_0: 1,_1: 1},_1: $Block.Block($Color.green)}]));
+   var fillRow = F3(function (row,block,board) {
+      var blocks = A2($List.repeat,cols,block);
+      var rows = A2($List.repeat,cols,row);
+      var columns = iota(cols);
+      var locations = A3($List.map2,F2(function (v0,v1) {    return {ctor: "_Tuple2",_0: v0,_1: v1};}),rows,columns);
+      var filledRow = $new(A3($List.map2,F2(function (v0,v1) {    return {ctor: "_Tuple2",_0: v0,_1: v1};}),locations,blocks));
+      return A2($Dict.union,filledRow,board);
+   });
+   var addTetromino = F2(function (_p16,board) {
+      var _p17 = _p16;
+      var asBoard = $new(A3($List.map2,F2(function (v0,v1) {    return {ctor: "_Tuple2",_0: v0,_1: v1};}),_p17.shape,A2($List.repeat,4,_p17.block)));
+      return A2($Dict.union,asBoard,board);
+   });
+   var test = $new(_U.list([]));
+   var main = A2($Graphics$Element.flow,
+   $Graphics$Element.down,
+   _U.list([A3($Graphics$Collage.collage,600,600,_U.list([toForm(A2(addTetromino,tetromino,test))])),$Graphics$Element.show(A2(isValid,tetromino,test))]));
+   return _elm.Board.values = {_op: _op
+                              ,$new: $new
+                              ,cols: cols
+                              ,rows: rows
+                              ,background: background
+                              ,addBlock: addBlock
+                              ,toForm: toForm
+                              ,testForm: testForm
+                              ,testForm$: testForm$
+                              ,testForm$$: testForm$$
+                              ,testBoard: testBoard
+                              ,cumulativeSum: cumulativeSum
+                              ,iota: iota
+                              ,fillRow: fillRow
+                              ,checkRow: checkRow
+                              ,clearRow: clearRow
+                              ,clearLines: clearLines
+                              ,addTetromino: addTetromino
+                              ,inBounds: inBounds
+                              ,isIntersecting: isIntersecting
+                              ,isValid: isValid
+                              ,tetromino: tetromino
+                              ,test: test
+                              ,main: main};
+};
+Elm.Controller = Elm.Controller || {};
+Elm.Controller.make = function (_elm) {
+   "use strict";
+   _elm.Controller = _elm.Controller || {};
+   if (_elm.Controller.values) return _elm.Controller.values;
+   var _U = Elm.Native.Utils.make(_elm),
+   $Basics = Elm.Basics.make(_elm),
+   $Debug = Elm.Debug.make(_elm),
+   $Graphics$Element = Elm.Graphics.Element.make(_elm),
+   $Keyboard = Elm.Keyboard.make(_elm),
+   $List = Elm.List.make(_elm),
+   $Maybe = Elm.Maybe.make(_elm),
+   $Result = Elm.Result.make(_elm),
+   $Signal = Elm.Signal.make(_elm),
+   $Time = Elm.Time.make(_elm);
+   var _op = {};
+   var Tick = function (a) {    return {ctor: "Tick",_0: a};};
+   var Shift = function (a) {    return {ctor: "Shift",_0: a};};
+   var Rotate = {ctor: "Rotate"};
+   var arrowsToInput = function (_p0) {    var _p1 = _p0;var _p2 = _p1.y;return _U.eq(_p2,1) ? Rotate : Shift({ctor: "_Tuple2",_0: _p2,_1: _p1.x});};
+   var inputs = function () {
+      var keys = A2($Signal.map,arrowsToInput,$Keyboard.arrows);
+      var ticks = A2($Signal.map,Tick,$Time.fps(30));
+      return A2($Signal.merge,ticks,keys);
+   }();
+   var main = A2($Signal.map,$Graphics$Element.show,inputs);
+   return _elm.Controller.values = {_op: _op,Rotate: Rotate,Shift: Shift,Tick: Tick,arrowsToInput: arrowsToInput,inputs: inputs,main: main};
+};
+Elm.State = Elm.State || {};
+Elm.State.make = function (_elm) {
+   "use strict";
+   _elm.State = _elm.State || {};
+   if (_elm.State.values) return _elm.State.values;
+   var _U = Elm.Native.Utils.make(_elm),
+   $Basics = Elm.Basics.make(_elm),
+   $Board = Elm.Board.make(_elm),
+   $Controller = Elm.Controller.make(_elm),
+   $Debug = Elm.Debug.make(_elm),
+   $Graphics$Collage = Elm.Graphics.Collage.make(_elm),
+   $Graphics$Element = Elm.Graphics.Element.make(_elm),
+   $List = Elm.List.make(_elm),
+   $Maybe = Elm.Maybe.make(_elm),
+   $Result = Elm.Result.make(_elm),
+   $Signal = Elm.Signal.make(_elm),
+   $Tetromino = Elm.Tetromino.make(_elm),
+   $Time = Elm.Time.make(_elm);
+   var _op = {};
+   var tryKicks = F3(function (shifts,current,nextState) {
+      tryKicks: while (true) {
+         var _p0 = shifts;
+         if (_p0.ctor === "[]") {
+               return current;
+            } else {
+               var shifted = A2($Tetromino.shift,_p0._0,nextState.falling);
+               if (A2($Board.isValid,shifted,nextState.board)) return _U.update(nextState,{falling: shifted}); else {
+                     var _v1 = _p0._1,_v2 = current,_v3 = nextState;
+                     shifts = _v1;
+                     current = _v2;
+                     nextState = _v3;
+                     continue tryKicks;
+                  }
+            }
+      }
+   });
+   var wallKick = F2(function (current,nextState) {
+      var range = nextState.falling.cols / 2 | 0;
+      var shifts = A2($List.concatMap,function (n) {    return _U.list([{ctor: "_Tuple2",_0: 0,_1: n},{ctor: "_Tuple2",_0: 0,_1: 0 - n}]);},_U.range(1,range));
+      return A3(tryKicks,shifts,current,nextState);
+   });
+   var floorKick = F2(function (current,nextState) {
+      var range = nextState.falling.rows / 2 | 0;
+      var shifts = A2($List.map,function (n) {    return {ctor: "_Tuple2",_0: n,_1: 0};},_U.range(1,range));
+      return A3(tryKicks,shifts,current,nextState);
+   });
+   var useIfValid = F2(function (current,$new) {    return A2($Board.isValid,$new.falling,$new.board) ? $new : current;});
+   var checkTick = function (state) {
+      return _U.cmp(state.time,state.nextShift) < 0 ? state : _U.update(state,
+      {falling: A2($Tetromino.shift,{ctor: "_Tuple2",_0: -1,_1: 0},state.falling),nextShift: state.time + state.shiftDelay});
+   };
    var update = F2(function (input,state) {
-      var _p0 = input;
-      if (_p0.ctor === "Rotate") {
-            return _U.update(state,{falling: $Tetromino.rotate(state.falling)});
-         } else {
-            return _U.update(state,{falling: A2($Tetromino.shift,_p0._0,state.falling)});
-         }
+      var useIfValid$ = useIfValid(state);
+      var _p1 = input;
+      switch (_p1.ctor)
+      {case "Rotate": var rotated = _U.update(state,{falling: $Tetromino.rotate(state.falling)});
+           var nextState = useIfValid$(rotated);
+           var nextState$ = _U.eq(nextState,state) ? A2(wallKick,state,rotated) : nextState;
+           var nextState$$ = _U.eq(nextState$,state) ? A2(floorKick,state,rotated) : nextState$;
+           return nextState$$;
+         case "Shift": return useIfValid$(_U.update(state,{falling: A2($Tetromino.shift,_p1._0,state.falling)}));
+         default: return useIfValid$(checkTick(_U.update(state,{time: state.time + _p1._0})));}
    });
    var view = function (state) {
-      var fallingForm = $Tetromino.toForm(state.falling);
+      var boardForm = $Board.toForm(A2($Board.addTetromino,state.falling,state.board));
       var screenHeight = 600;
       var screenWidth = 800;
-      return A3($Graphics$Collage.collage,screenWidth,screenHeight,_U.list([fallingForm]));
+      return A3($Graphics$Collage.collage,screenWidth,screenHeight,_U.list([boardForm]));
    };
-   var defaultState = {falling: $Tetromino.t};
+   var startingShift = {ctor: "_Tuple2",_0: 20,_1: 5};
+   var defaultState = {falling: A2($Tetromino.shift,startingShift,$Tetromino.j)
+                      ,board: $Board.$new(_U.list([]))
+                      ,time: 0
+                      ,nextShift: $Time.second
+                      ,shiftDelay: $Time.second};
    var states = A3($Signal.foldp,update,defaultState,$Controller.inputs);
    var main = A2($Signal.map,view,states);
-   var State = function (a) {    return {falling: a};};
-   return _elm.State.values = {_op: _op,State: State,defaultState: defaultState,view: view,update: update,states: states,main: main};
+   var State = F5(function (a,b,c,d,e) {    return {falling: a,board: b,time: c,nextShift: d,shiftDelay: e};});
+   return _elm.State.values = {_op: _op
+                              ,State: State
+                              ,startingShift: startingShift
+                              ,defaultState: defaultState
+                              ,view: view
+                              ,checkTick: checkTick
+                              ,useIfValid: useIfValid
+                              ,tryKicks: tryKicks
+                              ,wallKick: wallKick
+                              ,floorKick: floorKick
+                              ,update: update
+                              ,states: states
+                              ,main: main};
 };
