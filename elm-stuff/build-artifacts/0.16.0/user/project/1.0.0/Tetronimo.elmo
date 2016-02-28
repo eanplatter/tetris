@@ -1,0 +1,28 @@
+Elm.Tetronimo = Elm.Tetronimo || {};
+Elm.Tetronimo.make = function (_elm) {
+   "use strict";
+   _elm.Tetronimo = _elm.Tetronimo || {};
+   if (_elm.Tetronimo.values) return _elm.Tetronimo.values;
+   var _U = Elm.Native.Utils.make(_elm),
+   $Basics = Elm.Basics.make(_elm),
+   $Block = Elm.Block.make(_elm),
+   $Debug = Elm.Debug.make(_elm),
+   $Graphics$Collage = Elm.Graphics.Collage.make(_elm),
+   $List = Elm.List.make(_elm),
+   $Maybe = Elm.Maybe.make(_elm),
+   $Result = Elm.Result.make(_elm),
+   $Signal = Elm.Signal.make(_elm);
+   var _op = {};
+   var toForm = function (_p0) {
+      var _p1 = _p0;
+      var form = $Block.toForm(_p1.block);
+      var translate = function (_p2) {
+         var _p3 = _p2;
+         return A2($Graphics$Collage.move,{ctor: "_Tuple2",_0: $Basics.toFloat(_p3._1) * $Block.size,_1: $Basics.toFloat(_p3._0) * $Block.size},form);
+      };
+      var forms = A2($List.map,translate,_p1.shape);
+      return $Graphics$Collage.group(forms);
+   };
+   var Tetronimo = F2(function (a,b) {    return {shape: a,block: b};});
+   return _elm.Tetronimo.values = {_op: _op,Tetronimo: Tetronimo,toForm: toForm};
+};
